@@ -26,7 +26,11 @@ app = FastAPI(title="Kiyanna API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url],
+    allow_origins=[
+        settings.frontend_url,          # production: https://kapruka.bitzandbeyond.com
+        "http://localhost:3000",         # local dev
+        "http://127.0.0.1:3000",        # local dev (alternate)
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -12,7 +12,7 @@ yaml_config = load_yaml_config()
 class Settings(BaseSettings):
     openrouter_api_key: str
     kapruka_mcp_url: str = "https://mcp.kapruka.com/mcp"
-    frontend_url: str = "http://localhost:3000"
+    frontend_url: str = "https://kapruka.bitzandbeyond.com"
     app_env: str = "development"
     
     @property

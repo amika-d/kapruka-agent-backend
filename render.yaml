@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: kapruka-agent-backend
+    runtime: python
+    buildCommand: pip install uv && uv sync
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: KAPRUKA_MCP_URL
+        value: https://mcp.kapruka.com/mcp
+      - key: APP_ENV
+        value: production
+      - key: FRONTEND_URL
+        value: https://kapruka.bitzandbeyond.com
