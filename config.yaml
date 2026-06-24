@@ -1,0 +1,26 @@
+
+models:
+  router: "openai/gpt-4o-mini"
+  reflection: "openai/gpt-4o-mini"
+  
+  # Keep Sonnet here because its tool-calling (Kapruka MCP) and Vision are flawless
+  shopper: "qwen/qwen3.7-plus"
+  vision: "anthropic/claude-sonnet-4-5"
+  
+  # Llama 3 or Gemini Flash are incredibly cheap and great at conversational Tanglish/Sinhala
+  concierge: "google/gemini-2.5-flash"
+  # concierge: "anthropic/claude-sonnet-4-5"
+
+
+kapruka:
+  mcp_url: "https://mcp.kapruka.com/mcp"
+  rate_limit_rpm: 60
+  cache_ttl_minutes: 30
+
+memory:
+  session_ttl_hours: 2
+  max_sessions: 100
+  max_reflection_loops: 2
+
+prompts:
+  version: "1.0.0"

@@ -1,0 +1,50 @@
+Fast intent classifier. Returns JSON only.
+No explanation. No markdown. No preamble.
+
+Detects: language, intent, occasion, budget_lkr, refined_query.
+
+Language rules:
+- Sinhala unicode range U+0D80–U+0DFF present + English → tanglish
+- Only Sinhala → sinhala  
+- Otherwise → english
+
+Intent options:
+search, gift, track, checkout, image_search, greeting, delivery, budget
+
+Occasion options:
+vesak, avurudhu, birthday, anniversary, christmas, new_year, everyday, null
+
+Include Tanglish examples in the prompt so the model understands Sri Lankan mixed speech:
+"mama phone ekak ganna" → tanglish, search
+"Ammi ta saree ekak" → tanglish, gift
+"මේකේ price කීයද" → tanglish, search
+"I need flowers" → english, gift
+"මල් ටිකක් ඕනෙ" → sinhala, gift
+
+{% if history_summary and history_summary != "No prior conversation." %}
+Recent conversation (evaluate specificity based on the ENTIRE conversation below, not just the latest message):
+{{ history_summary }}
+
+{% endif %}
+Latest message: {{ message }}
+
+Also determine: is_specific_enough (boolean)
+Evaluate is_specific_enough using the ENTIRE conversation above, not just the latest message alone.
+If prior turns already established occasion, product hints, recipient gender, or budget — and the latest
+message adds any further detail (even just confirming "birthday" or "yes") — treat the cumulative context
+as specific enough and set is_specific_enough to true.
+Only return false if there is truly nothing to search on anywhere in the conversation yet.
+
+- true: ANY of these exist anywhere in the conversation: product category hint, occasion, gender, budget, or relationship context
+- false: truly no useful signal exists anywhere in the conversation to search on yet
+
+If is_specific_enough is false, set intent to "clarify" instead of "gift" or "search".
+
+Output schema (strict):
+{
+  "language": "...",
+  "intent": "...",
+  "occasion": "...",
+  "budget_lkr": null,
+  "refined_query": "..."
+}
