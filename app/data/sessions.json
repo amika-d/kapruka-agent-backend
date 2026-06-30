@@ -1,1 +1,22 @@
-{}
+{
+  "ec8e48b2-28fc-4f2d-b37f-53694ade8895": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "find clothes to where for a party"
+      },
+      {
+        "role": "user",
+        "content": "its white theme and i would like a dress"
+      }
+    ],
+    "cart": [],
+    "language": "english",
+    "occasion": null,
+    "delivery_city": null,
+    "browsed_products": [],
+    "rejected_products": [],
+    "last_query": null,
+    "last_accessed": 1782802755.1519275
+  }
+}

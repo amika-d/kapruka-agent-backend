@@ -55,9 +55,10 @@ async def event_generator(request: ChatRequest):
                     key = f"{step.get('step')}_{step.get('detail')}"
                     if key not in seen_step_keys:
                         seen_step_keys.add(key)
-                        yield f"data: {json.dumps({'type': 'thinking', 'payload': step})}\n\n"
+                        # Flat shape: {type, step, detail, status}
+                        yield f"data: {json.dumps({'type': 'thinking', 'step': step.get('step'), 'detail': step.get('detail'), 'status': step.get('status', 'done')})}\n\n"
                         await asyncio.sleep(0)
-                
+
                 # Stream search results as product carousel
                 if node_output.get("search_results"):
                     products = node_output["search_results"]
@@ -69,7 +70,17 @@ async def event_generator(request: ChatRequest):
                     }
                     yield f"data: {json.dumps(ui_payload)}\n\n"
                     await asyncio.sleep(0)
-                
+
+                # Stream tracking card
+                if node_output.get("order_status"):
+                    yield f"data: {json.dumps({'type': 'tracking_card', 'data': node_output['order_status']})}\n\n"
+                    await asyncio.sleep(0)
+
+                # Stream pay link
+                if node_output.get("pay_link"):
+                    yield f"data: {json.dumps({'type': 'pay_link', 'url': node_output['pay_link']})}\n\n"
+                    await asyncio.sleep(0)
+
                 # Stream final text response word by word
                 if node_output.get("final_response"):
                     response = node_output["final_response"]

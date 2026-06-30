@@ -3,7 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 
-from app.api.v1 import chat, health
+from app.api.v1 import chat, health, checkout
+
 from app.core.config import settings
 from app.mcp.client import close_client
 from app.core.category_cache import load_categories_from_file
@@ -38,6 +39,7 @@ app.add_middleware(
 
 app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
+app.include_router(checkout.router, prefix="/api/v1", tags=["checkout"])
 
 @app.get("/")
 async def root():

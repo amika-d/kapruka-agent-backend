@@ -1,50 +1,25 @@
-Fast intent classifier. Returns JSON only.
-No explanation. No markdown. No preamble.
+Fast intent classifier. Return JSON only. No explanation, no markdown, no preamble.
+Detect: language, intent, occasion, budget_lkr, refined_query.
 
-Detects: language, intent, occasion, budget_lkr, refined_query.
+LANGUAGE: Sinhala unicode (U+0D80–U+0DFF) + English = tanglish. Only Sinhala = sinhala. Otherwise = english.
+Examples: "mama phone ekak ganna"=tanglish/search | "Ammi ta saree ekak"=tanglish/gift | "මේකේ price කීයද"=tanglish/search | "I need flowers"=english/gift | "මල් ටිකක් ඕනෙ"=sinhala/gift
 
-Language rules:
-- Sinhala unicode range U+0D80–U+0DFF present + English → tanglish
-- Only Sinhala → sinhala  
-- Otherwise → english
+INTENT options: search, gift, track, checkout, image_search, greeting, delivery, budget, clarify
+- checkout: explicit purchase intent ("checkout", "buy this", "let's order", "pay now", buy/order/pay/proceed)
+- track: asking about existing order ("where's my order", "track my package", or contains order number pattern) — extract order number (e.g. VPAY827982BA) into order_number
 
-Intent options:
-search, gift, track, checkout, image_search, greeting, delivery, budget
-
-Occasion options:
-vesak, avurudhu, birthday, anniversary, christmas, new_year, everyday, null
-
-Include Tanglish examples in the prompt so the model understands Sri Lankan mixed speech:
-"mama phone ekak ganna" → tanglish, search
-"Ammi ta saree ekak" → tanglish, gift
-"මේකේ price කීයද" → tanglish, search
-"I need flowers" → english, gift
-"මල් ටිකක් ඕනෙ" → sinhala, gift
+OCCASION options: vesak, avurudhu, birthday, anniversary, christmas, new_year, everyday, null
 
 {% if history_summary and history_summary != "No prior conversation." %}
-Recent conversation (evaluate specificity based on the ENTIRE conversation below, not just the latest message):
+Recent conversation (evaluate specificity using the ENTIRE conversation, not just the latest message):
 {{ history_summary }}
-
 {% endif %}
 Latest message: {{ message }}
 
-Also determine: is_specific_enough (boolean)
-Evaluate is_specific_enough using the ENTIRE conversation above, not just the latest message alone.
-If prior turns already established occasion, product hints, recipient gender, or budget — and the latest
-message adds any further detail (even just confirming "birthday" or "yes") — treat the cumulative context
-as specific enough and set is_specific_enough to true.
-Only return false if there is truly nothing to search on anywhere in the conversation yet.
+is_specific_enough (boolean): evaluate using the ENTIRE conversation above.
+- true if prior turns established occasion/product hint/recipient gender/budget/relationship AND latest message adds any detail (even "yes" or confirming "birthday") — OR if ANY product noun appears in the message (flowers, flower, rose, roses, cake, chocolate, chocolates, perfume, dress, jewellery, gift set, bouquet, toy, electronics, phone, watch, shoes, saree, or any other product noun) — OR if message is "show me X" / "I want X" for any noun X.
+- false only if truly no useful signal exists anywhere yet.
+- If false, set intent to "clarify" instead of "gift"/"search".
 
-- true: ANY of these exist anywhere in the conversation: product category hint, occasion, gender, budget, or relationship context
-- false: truly no useful signal exists anywhere in the conversation to search on yet
-
-If is_specific_enough is false, set intent to "clarify" instead of "gift" or "search".
-
-Output schema (strict):
-{
-  "language": "...",
-  "intent": "...",
-  "occasion": "...",
-  "budget_lkr": null,
-  "refined_query": "..."
-}
+Output schema (strict, no extra fields):
+{"language":"...","intent":"...","occasion":"...","budget_lkr":null,"refined_query":"...","gift_recipient_gender":null,"gift_recipient_relation":null,"emotional_context":null,"order_number":null}

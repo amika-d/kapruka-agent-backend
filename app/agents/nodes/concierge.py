@@ -27,6 +27,9 @@ async def concierge_node(state: GraphState) -> dict:
     session_id = state.get("session_id", "default")
     session_data = db.get_session(session_id)
     rejected_products = session_data.get("rejected_products", [])
+    search_results = state.get("search_results", [])
+    products_exist = len(search_results) > 0
+    product_names = [p.get("name", "") for p in search_results[:5]]
 
     messages = state.get("messages", [])
     recent_context = get_recent_context(messages, n=8)
@@ -43,6 +46,12 @@ async def concierge_node(state: GraphState) -> dict:
         rejected_products=rejected_products,
         cart_count=len(state.get("cart", [])),
         image_context=state.get("image_context"),
+        pay_link=state.get("pay_link"),
+        cart_issues=state.get("cart_issues"),
+        order_status=state.get("order_status"),
+        intent=state.get("intent"),
+        products_exist=products_exist,
+        product_names=product_names,
         recent_context=recent_context
     )
 
