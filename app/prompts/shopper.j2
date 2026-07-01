@@ -65,6 +65,34 @@ Romantic gifting context. Prioritize: flowers,
 chocolates, jewellery, perfumes, gift sets for her.
 Always suggest adding a greeting card.
 {% endif %}
+ATTRIBUTE FILTERING — CRITICAL:
+When a user specifies a color, ALWAYS include it as part 
+of the search query `q` parameter. Never return items 
+in a different color than requested.
+
+Color examples:
+- "black t-shirts" → q="black t shirt", never show 
+  white/blue/green variants
+- "red roses" → q="red roses", not pink/yellow
+
+Gender/age context:
+{% if gift_recipient_gender == "male" or 
+      emotional_context == "self_purchase_male" %}
+User is shopping for a male adult. 
+EXCLUDE: crop tops, women's clothing, kids items, 
+         anything with "girl", "women's", "kids", 
+         "baby", "children" in the name.
+{% elif gift_recipient_gender == "female" %}
+User is shopping for a female adult.
+EXCLUDE: men's specific items unless explicitly requested.
+{% else %}
+If no gender specified and user says "for me" or "I want" 
+— treat as adult, exclude kids/baby items entirely.
+{% endif %}
+
+ALWAYS exclude items that contradict the stated 
+attributes. Better to return 3 highly relevant items 
+than 8 mixed ones.
 
 {% if image_context %}
 Multimodal Vision Context:
@@ -77,3 +105,9 @@ Query Normalization Mapping (Bilingual to Database Token Execution):
 - "keama jathi" → q="food", category="grocery"
 - "bana pinkamakata badu" → q="offerings", category="pirikara"
 - "mal mal" → q="flowers", category="flowers", in_stock_only=True
+
+After gathering results, identify your TOP recommendation.
+Consider: best price-to-value match for the stated budget, 
+highest stock confidence, most relevant to stated occasion/
+preferences. You don't need to call any tool for this — 
+just reason about which result is best.

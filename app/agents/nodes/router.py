@@ -63,19 +63,22 @@ async def router_node(state: GraphState) -> dict:
                 "budget_lkr": None,
                 "gift_recipient_gender": None,
                 "gift_recipient_relation": None,
-                "emotional_context": None
+                "emotional_context": None,
+                "requested_color": None,
+                "exclude_kids": False
             }
         
         intent = result.get("intent", "search")
         lang = result.get("language", "english")
+        order_number = result.get("order_number")
         my_steps = [{
             "type": "thinking",
             "step": "Routing",
             "detail": f"Detected: {intent}, {lang}",
             "status": "done"
         }]
-        
-        return {
+
+        state_update: dict = {
             "language": lang,
             "intent": intent,
             "occasion": result.get("occasion"),
@@ -83,11 +86,19 @@ async def router_node(state: GraphState) -> dict:
             "gift_recipient_gender": result.get("gift_recipient_gender"),
             "gift_recipient_relation": result.get("gift_recipient_relation"),
             "emotional_context": result.get("emotional_context"),
+            "requested_color": result.get("requested_color"),
+            "exclude_kids": result.get("exclude_kids", False),
             "thinking_steps": my_steps,
             "reflection_needed": False,
             "reflection_count": 0,
             "search_results": []
         }
+
+        # For tracking intent: inject order number into messages so tracking_node can regex it
+        if intent == "track" and order_number:
+            state_update["messages"] = [{"role": "system", "content": f"ORDER_NUMBER:{order_number}"}]
+
+        return state_update
     except Exception as e:
         logger.error(f"Router error: {e}")
         return {

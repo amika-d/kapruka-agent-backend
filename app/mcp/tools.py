@@ -159,49 +159,47 @@ async def get_complementary_products(primary_category: str, occasion: Optional[s
         
     return {"suggestions": suggestions}
 
-import re 
-def parse_search_results(raw: dict) -> list[dict]:
-    text = raw.get("result", "")
-    products = []
-    
-    # Split by numbered items
-    blocks = re.split(r'\n\*\*\d+\.', text)
-    
-    for block in blocks[1:]:  # skip header
-        product = {}
-        
-        # Name
-        name_match = re.match(r'\s*(.+?)\*\*', block)
-        if name_match:
-            product["name"] = name_match.group(1).strip()
-        
-        # ID
-        id_match = re.search(r'ID:\s*`([^`]+)`', block)
-        if id_match:
-            product["product_id"] = id_match.group(1)
-        
-        # Price
-        price_match = re.search(r'LKR\s*([\d,]+)', block)
-        if price_match:
-            product["price"] = float(price_match.group(1).replace(",", ""))
-            product["currency"] = "LKR"
-        
-        # Stock
-        product["in_stock"] = "In stock" in block or "in stock" in block
-        
-        # URL
-        url_match = re.search(r'\[View product\]\(([^)]+)\)', block)
-        if url_match:
-            product["url"] = url_match.group(1)
-        
-        # image_url — not in search results, need get_product call
-        product["image_url"] = ""
-        
-        if product.get("product_id"):
-            products.append(product)
-    
-    return products
 
+def parse_order_status(raw: dict) -> dict:
+    text = raw.get("result", "")
+    status = {}
+    
+    # Order number + overall status
+    header_match = re.search(r'Order `([^`]+)` — (\w+)', text)
+    if header_match:
+        status["order_number"] = header_match.group(1)
+        status["status"] = header_match.group(2)
+    
+    # Total
+    total_match = re.search(r"Total \| \{'value': '([\d.]+)', 'currency': '(\w+)'\}", text)
+    if total_match:
+        status["total"] = float(total_match.group(1))
+        status["currency"] = total_match.group(2)
+    
+    # Delivery date
+    date_match = re.search(r'Delivery date \| ([\d\s/A-Z]+)', text)
+    if date_match:
+        status["delivery_date"] = date_match.group(1).strip()
+    
+    # Recipient name
+    recipient_match = re.search(r'- (MS\.|MR\.|MRS\.)\s*([A-Z\s]+)', text)
+    if recipient_match:
+        status["recipient_name"] = recipient_match.group(0).strip().lstrip("- ")
+    
+    # Progress timeline — extract all "- TIMESTAMP — description" lines
+    progress = []
+    progress_section = text.split("**Progress**")[-1] if "**Progress**" in text else ""
+    for line in progress_section.split("\n"):
+        line = line.strip()
+        match = re.match(r'-\s*(.+?)\s*—\s*(.+)', line)
+        if match:
+            progress.append({
+                "timestamp": match.group(1).strip(),
+                "description": match.group(2).strip()
+            })
+    status["progress"] = progress
+    
+    return status
 
 TOOL_EXECUTOR = {
     "kapruka_search_products": kapruka_search_products,
