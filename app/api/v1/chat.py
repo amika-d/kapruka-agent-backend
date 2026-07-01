@@ -52,11 +52,13 @@ async def event_generator(request: ChatRequest):
                 
                 # Stream thinking steps as they come
                 for step in node_output.get("thinking_steps", []):
-                    key = f"{step.get('step')}_{step.get('detail')}"
+                    step_name = step.get("step") or ""
+                    step_detail = step.get("detail") or ""
+                    key = f"{step_name}_{step_detail}"
                     if key not in seen_step_keys:
                         seen_step_keys.add(key)
                         # Flat shape: {type, step, detail, status}
-                        yield f"data: {json.dumps({'type': 'thinking', 'step': step.get('step'), 'detail': step.get('detail'), 'status': step.get('status', 'done')})}\n\n"
+                        yield f"data: {json.dumps({'type': 'thinking', 'step': step_name, 'detail': step_detail, 'status': step.get('status', 'done')})}\n\n"
                         await asyncio.sleep(0)
 
                 # Stream search results as product carousel
