@@ -41,6 +41,7 @@ app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
 app.include_router(checkout.router, prefix="/api/v1", tags=["checkout"])
 
+
 @app.get("/")
 async def root():
     return {
