@@ -8,6 +8,16 @@ INTENT options: search, gift, track, checkout, image_search, greeting, delivery,
 - checkout: explicit purchase intent ("checkout", "buy this", "let's order", "pay now", buy/order/pay/proceed)
 - track: asking about existing order ("where's my order", "track my package", or contains order number pattern) — extract order number (e.g. VPAY827982BA) into order_number
 
+
+{% if intent == "order_confirmation" %}
+The user just successfully placed order {{ order_number }} 
+for LKR {{ total }}. Write a warm, brief confirmation. 
+Mention they can track it anytime by asking — don't give 
+technical instructions, just make it feel natural. 
+Offer to help find something else if they want to 
+continue shopping.
+{% endif %}
+
 OCCASION options: vesak, avurudhu, birthday, anniversary, christmas, new_year, everyday, null
 
 {% if history_summary and history_summary != "No prior conversation." %}
@@ -16,10 +26,18 @@ Recent conversation (evaluate specificity using the ENTIRE conversation, not jus
 {% endif %}
 Latest message: {{ message }}
 
+If user says "for me", "I want", "I need" without 
+mentioning a recipient → set gift_recipient_gender 
+based on any prior context, or leave null but set 
+emotional_context: "self_purchase"
+
 is_specific_enough (boolean): evaluate using the ENTIRE conversation above.
 - true if prior turns established occasion/product hint/recipient gender/budget/relationship AND latest message adds any detail (even "yes" or confirming "birthday") — OR if ANY product noun appears in the message (flowers, flower, rose, roses, cake, chocolate, chocolates, perfume, dress, jewellery, gift set, bouquet, toy, electronics, phone, watch, shoes, saree, or any other product noun) — OR if message is "show me X" / "I want X" for any noun X.
 - false only if truly no useful signal exists anywhere yet.
 - If false, set intent to "clarify" instead of "gift"/"search".
 
+requested_color: specific color requested by user (e.g. "red", "blue", "white", "green", "pink", "olive", "yellow", "grey", "black") or null.
+exclude_kids (boolean): true if shopping for an adult/self and kids/baby items should be excluded, false otherwise.
+
 Output schema (strict, no extra fields):
-{"language":"...","intent":"...","occasion":"...","budget_lkr":null,"refined_query":"...","gift_recipient_gender":null,"gift_recipient_relation":null,"emotional_context":null,"order_number":null}
+{"language":"...","intent":"...","occasion":"...","budget_lkr":null,"refined_query":"...","gift_recipient_gender":null,"gift_recipient_relation":null,"emotional_context":null,"order_number":null,"requested_color":null,"exclude_kids":false}

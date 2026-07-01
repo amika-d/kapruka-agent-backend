@@ -63,7 +63,9 @@ async def router_node(state: GraphState) -> dict:
                 "budget_lkr": None,
                 "gift_recipient_gender": None,
                 "gift_recipient_relation": None,
-                "emotional_context": None
+                "emotional_context": None,
+                "requested_color": None,
+                "exclude_kids": False
             }
         
         intent = result.get("intent", "search")
@@ -84,6 +86,8 @@ async def router_node(state: GraphState) -> dict:
             "gift_recipient_gender": result.get("gift_recipient_gender"),
             "gift_recipient_relation": result.get("gift_recipient_relation"),
             "emotional_context": result.get("emotional_context"),
+            "requested_color": result.get("requested_color"),
+            "exclude_kids": result.get("exclude_kids", False),
             "thinking_steps": my_steps,
             "reflection_needed": False,
             "reflection_count": 0,

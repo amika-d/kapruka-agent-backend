@@ -45,6 +45,28 @@ def dedupe_products(products: list[dict]) -> list[dict]:
     return unique
 
 
+def is_relevant(product: dict, intent_context: dict) -> bool:
+    name = product.get("name", "").lower()
+    
+    # Filter kids items if adult purchase
+    kids_keywords = ["kids", "baby", "children", "toddler", 
+                     "infant", "girl baby", "boy baby"]
+    if intent_context.get("exclude_kids"):
+        if any(k in name for k in kids_keywords):
+            return False
+    
+    # Filter wrong color if color specified
+    requested_color = intent_context.get("requested_color")
+    if requested_color:
+        color_variants = ["white", "blue", "red", "green", 
+                          "pink", "olive", "yellow", "grey"]
+        other_colors = [c for c in color_variants if c != requested_color]
+        if any(c in name.lower() for c in other_colors):
+            return False
+    
+    return True
+
+
 async def shopper_node(state: GraphState) -> dict:
     messages = state.get("messages", [])
     my_steps = []
@@ -53,6 +75,14 @@ async def shopper_node(state: GraphState) -> dict:
 
     session_data = db.get_session(session_id)
     rejected_products = session_data.get("rejected_products", [])
+
+    intent_context = {
+        "requested_color": state.get("requested_color"),
+        "exclude_kids": state.get("exclude_kids") or (
+            state.get("gift_recipient_gender") in ["male", "female"]
+            or state.get("emotional_context") in ["self_purchase", "self_purchase_male", "self_purchase_female"]
+        )
+    }
 
     formatted_messages = []
     for msg in messages:
@@ -132,7 +162,8 @@ async def shopper_node(state: GraphState) -> dict:
                     if fn_name == "kapruka_search_products":
                         new_results = parse_search_results(result)
                         filtered = [r for r in new_results
-                                    if r.get("product_id") not in rejected_products]
+                                    if r.get("product_id") not in rejected_products
+                                    and is_relevant(r, intent_context)]
                         search_results.extend(filtered)
                     elif fn_name == "kapruka_get_product":
                         detail = parse_product_detail(result)

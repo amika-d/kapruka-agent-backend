@@ -36,3 +36,5 @@ class GraphState(TypedDict):
     gift_message: Optional[str]
     # Search quality
     rejected_products: List[str]
+    requested_color: Optional[str]
+    exclude_kids: Optional[bool]

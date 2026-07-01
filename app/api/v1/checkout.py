@@ -64,58 +64,82 @@ class GiftMessageRequest(BaseModel):
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _parse_cities(raw: dict) -> list[str]:
-    """Extract canonical city names from kapruka_list_delivery_cities response."""
+    """Extract canonical city names from kapruka_list_delivery_cities response.
+    
+    Kapruka returns lines like:
+      - **Colombo 01**  _aliases: Colombo1_
+    We want only the text between **...**.
+    """
     text = raw.get("result", "")
-    cities = []
+    # Primary: extract all **City Name** fragments
+    cities = re.findall(r'\*\*([^*]+)\*\*', text)
+    cities = [c.strip() for c in cities if c.strip()]
+    if cities:
+        return cities[:50]
+    # Fallback: plain lines (no bold markdown)
+    result = []
     for line in text.splitlines():
         line = line.strip().lstrip("-•* ").strip()
-        # Lines usually look like: "Colombo 05" or "- Colombo 05 | ..."
         if line and not line.startswith("#"):
-            # Take only the city name part (before | or URL)
-            city = re.split(r"\s*[\|–—]", line)[0].strip()
+            city = re.split(r"\s*[\|\u2013\u2014]", line)[0].strip()
             if city:
-                cities.append(city)
-    return cities[:50]
+                result.append(city)
+    return result[:50]
 
 
 def _parse_order_result(raw: dict) -> dict:
-    """Extract order_number, total, pay_link, expires_at from create_order result."""
     text = raw.get("result", "")
     out: dict = {"order_number": None, "total": None, "pay_link": None, "expires_at": None}
 
-    # Pay link
-    url_match = re.search(r"(https?://\S+)", text)
-    if url_match:
-        out["pay_link"] = url_match.group(1).rstrip(")")
-
-    # Order number
-    num_match = re.search(r"(?:order[_ ](?:number|no|id)[:\s#]*|#)([A-Z0-9\-]{6,})", text, re.I)
+    num_match = re.search(r'Order created — `([^`]+)`', text)
     if num_match:
         out["order_number"] = num_match.group(1)
 
-    # Total
-    total_match = re.search(r"(?:total|amount)[:\s]*(?:LKR\s*)?([\d,]+(?:\.\d+)?)", text, re.I)
+    total_match = re.search(r'\*\*Grand total:\*\*\s*LKR\s*([\d,]+)', text)
     if total_match:
-        try:
-            out["total"] = float(total_match.group(1).replace(",", ""))
-        except ValueError:
-            pass
+        out["total"] = float(total_match.group(1).replace(",", ""))
+
+    pay_match = re.search(r'\[Open checkout to pay\]\((https?://[^)]+)\)', text)
+    if pay_match:
+        out["pay_link"] = pay_match.group(1)
+
+    expiry_match = re.search(r'expires at ([\d\-T:+]+)', text)
+    if expiry_match:
+        out["expires_at"] = expiry_match.group(1)
 
     return out
 
 
 async def _resolve_city(raw_city: str) -> Optional[str]:
-    """Call kapruka_list_delivery_cities and find the best canonical match."""
+    """Resolve a raw user city string to the canonical Kapruka city name.
+    
+    Kapruka returns markdown like: - **Colombo 01**  _aliases: Colombo1_
+    We extract only the content between **...**.
+    """
     try:
         result = await kapruka_list_delivery_cities(query=raw_city, limit=10)
-        cities = _parse_cities(result)
-        if not cities:
+        text = result.get("result", "")
+
+        # Extract all **City Name** values — these are the canonical names
+        bold_cities = re.findall(r'\*\*([^*]+)\*\*', text)
+        bold_cities = [c.strip() for c in bold_cities if c.strip()]
+
+        if not bold_cities:
+            # Fallback: use _parse_cities plain parser
+            bold_cities = _parse_cities(result)
+
+        if not bold_cities:
             return None
+
+        # Best match: city name that starts with the user's input
         raw_lower = raw_city.lower()
-        for city in cities:
-            if raw_lower in city.lower() or city.lower().startswith(raw_lower):
+        for city in bold_cities:
+            if city.lower().startswith(raw_lower) or raw_lower in city.lower():
                 return city
-        return cities[0]  # best available
+
+        # No close match — return first result
+        return bold_cities[0]
+
     except Exception as e:
         logger.warning(f"City resolution failed: {e}")
         return None
@@ -172,7 +196,7 @@ async def create_checkout(payload: CheckoutPayload) -> CheckoutResult:
             ],
             recipient={"name": payload.recipient_name, "phone": payload.recipient_phone},
             delivery={"city": resolved_city, "date": payload.delivery_date, "address": payload.delivery_address},
-            sender={"name": "Kiyanna User", "email": "kiyanna@kapruka.com"},
+            sender={"name": "Kiyanna User",},
             gift_message=payload.gift_message,
             currency=payload.currency,
         )
@@ -186,6 +210,7 @@ async def create_checkout(payload: CheckoutPayload) -> CheckoutResult:
     session = db.get_session(payload.session_id)
     session["last_order_number"] = [parsed["order_number"]]
     session["order_history"] = session.get("order_history", []) + [parsed["order_number"]]
+    
 
     return CheckoutResult(
         order_number=parsed["order_number"],
