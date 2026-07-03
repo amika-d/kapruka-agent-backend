@@ -5,7 +5,7 @@ models:
   
   # Keep Sonnet here because its tool-calling (Kapruka MCP) and Vision are flawless
   shopper: "qwen/qwen3.7-plus"
-  vision: "anthropic/claude-sonnet-4-5"
+  vision: "meta-llama/llama-3.2-11b-vision-instruct"
   
   # Llama 3 or Gemini Flash are incredibly cheap and great at conversational Tanglish/Sinhala
   concierge: "google/gemini-2.5-flash"
