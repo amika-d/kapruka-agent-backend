@@ -2,14 +2,17 @@
 models:
   router: "openai/gpt-4o-mini"
   reflection: "openai/gpt-4o-mini"
-  
+
   # Keep Sonnet here because its tool-calling (Kapruka MCP) and Vision are flawless
   shopper: "qwen/qwen3.7-plus"
-  vision: "meta-llama/llama-3.2-11b-vision-instruct"
   
-  # Llama 3 or Gemini Flash are incredibly cheap and great at conversational Tanglish/Sinhala
-  concierge: "google/gemini-2.5-flash"
-  # concierge: "anthropic/claude-sonnet-4-5"
+
+  # Native vision support — Gemini Flash handles multimodal well and cheaply
+  vision: "google/gemini-3.1-flash-lite"
+
+  # User-facing personality is ~65% of the judging rubric — don't cut cost here
+  # concierge: "google/gemini-2.5-flash"
+  concierge: "google/gemini-3.1-flash-lite"
 
 
 kapruka:
