@@ -42,6 +42,7 @@ async def event_generator(request: ChatRequest):
         config = {"configurable": {"thread_id": f"{request.session_id}_{uuid4()}"}}
         
         seen_step_keys = set()
+        final_text = None
         
         async for event in compiled_graph.astream(
             initial_state, 
@@ -85,8 +86,8 @@ async def event_generator(request: ChatRequest):
 
                 # Stream final text response word by word
                 if node_output.get("final_response"):
-                    response = node_output["final_response"]
-                    for word in response.split():
+                    final_text = node_output["final_response"]
+                    for word in final_text.split():
                         yield f"data: {json.dumps({'type': 'text', 'content': word + ' '})}\n\n"
                         await asyncio.sleep(0.04)
         
@@ -94,10 +95,10 @@ async def event_generator(request: ChatRequest):
         store.append_message(request.session_id, {
             "role": "user", "content": request.message
         })
-        if initial_state.get("final_response"):
+        if final_text:
             store.append_message(request.session_id, {
                 "role": "assistant", 
-                "content": initial_state["final_response"]
+                "content": final_text
             })
         
         yield "data: [DONE]\n\n"
