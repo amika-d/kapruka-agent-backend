@@ -6,16 +6,63 @@ from fastapi.responses import StreamingResponse
 from app.core.schemas import ChatRequest
 from app.agents.graph import compiled_graph
 from app.core.database import SessionStore
+from app.core.config import settings
+from app.core.prompt_loader import render_prompt
+from openai import AsyncOpenAI
 from uuid import uuid4
 
 router = APIRouter()
 from app.core.database import get_session_store
 store = get_session_store()
 
+vision_client = AsyncOpenAI(
+    api_key=settings.openrouter_api_key,
+    base_url="https://openrouter.ai/api/v1"
+)
+
+async def extract_vision_context(image_base64: str, language: str = "english") -> str:
+    """Run vision model on uploaded image before main graph."""
+    vision_prompt = render_prompt("vision", language=language)
+    
+    response = await vision_client.chat.completions.create(
+        model=settings.model_vision,
+        messages=[{
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{image_base64}"
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": vision_prompt
+                }
+            ]
+        }],
+        max_tokens=300
+    )
+    
+    return response.choices[0].message.content
+
 async def event_generator(request: ChatRequest):
     try:
         # Get session history
         session = store.get_session(request.session_id)
+        
+        # Extract vision context BEFORE building initial_state
+        image_context = None
+        if request.image_base64:
+            yield f"data: {json.dumps({'type': 'thinking', 'step': 'Vision', 'detail': 'Analyzing your image...', 'status': 'running'})}\n\n"
+            await asyncio.sleep(0)
+            try:
+                image_context = await extract_vision_context(request.image_base64)
+                detail_preview = image_context[:80] + "..." if len(image_context) > 80 else image_context
+                yield f"data: {json.dumps({'type': 'thinking', 'step': 'Vision', 'detail': detail_preview, 'status': 'done'})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'thinking', 'step': 'Vision', 'detail': f'Vision analysis failed: {str(e)}', 'status': 'error'})}\n\n"
+            await asyncio.sleep(0)
         
         # Build initial state
         initial_state = {
@@ -27,7 +74,7 @@ async def event_generator(request: ChatRequest):
             "language": "english",
             "occasion": None,
             "intent": None,
-            "image_context": None,
+            "image_context": image_context,
             "delivery_city": session.get("delivery_city"),
             "delivery_date": None,
             "search_results": [],
