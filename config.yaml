@@ -1,6 +1,6 @@
 
 models:
-  router: "openai/gpt-4o-mini"
+  router: "openai/gpt-5-nano"
   reflection: "openai/gpt-4o-mini"
 
   # Keep Sonnet here because its tool-calling (Kapruka MCP) and Vision are flawless
