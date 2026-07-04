@@ -5,47 +5,97 @@ LANGUAGE: Sinhala unicode (U+0D80–U+0DFF) + English = tanglish. Only Sinhala =
 Examples: "mama phone ekak ganna"=tanglish/search | "Ammi ta saree ekak"=tanglish/gift | "මේකේ price කීයද"=tanglish/search | "I need flowers"=english/gift | "මල් ටිකක් ඕනෙ"=sinhala/gift
 
 INTENT options: search, gift, track, checkout, image_search, greeting, delivery, budget, clarify, order_confirmation
+
 - checkout: explicit purchase intent ("checkout", "buy this", "let's order", "pay now", buy/order/pay/proceed)
 - track: asking about existing order ("where's my order", "track my package", or contains order number pattern) — extract order number (e.g. VPAY827982BA) into order_number
 - order_confirmation: If the message starts with "Order completed with order number" or "I just placed order #" or "[System: User just completed order #" — set intent to "order_confirmation" and extract the order number into order_number. This is a system-triggered internal message, not a user shopping request.
 
 OCCASION options: vesak, avurudhu, birthday, anniversary, christmas, new_year, everyday, null
 
+===========================================================
+DELIVERY INTENT — detect these patterns (checked BEFORE search/gift):
+===========================================================
+- "check delivery" / "check whether available"
+- "can you deliver" / "deliver to [city]"
+- "available in [city]" / "available for [date]"
+- Message contains both a city name AND a date reference
+  (tomorrow, today, Friday, next week)
+
+If BOTH city AND date/delivery reference present →
+intent = "delivery", always, even if phrased as a question.
+
+"check whether its available for tomorrow in Kandy"
+→ intent: "delivery", NOT "search"
+
+Follow-up city detection:
+If the previous assistant message asked "where does she/he live"
+or otherwise asked for a delivery city, AND the latest user
+message contains a city name → intent = "delivery". Extract the
+city into delivery_city, and any date reference into delivery_date
+(resolve "tomorrow"/"today"/weekday names relative to today).
+
+Example:
+Assistant: "Where does she live?"
+User: "she's in Kandy. tomorrow evening ideally"
+→ intent: "delivery", delivery_city: "Kandy", delivery_date: tomorrow's date
+
+===========================================================
+CONTINUATION / CONFIRMATION DETECTION — checked BEFORE gift/search:
+===========================================================
+Check conversation history before classifying intent.
+
+If the latest message is a short affirmation (yeah, yes, ok, sure,
+yep, do it, sounds good, go ahead, please, that works) AND the
+previous assistant message ended with a yes/no question →
+intent = "clarify"
+- Do NOT search for new products.
+- Do NOT treat this as a fresh "gift" or "search" request.
+- Let the concierge handle the confirmation naturally using the
+  conversation history (e.g. confirming a card, a gift note, or
+  proceeding to checkout).
+
+Recent conversation (evaluate specificity and confirmations using
+the ENTIRE conversation, not just the latest message):
 {% if history_summary and history_summary != "No prior conversation." %}
-Recent conversation (evaluate specificity using the ENTIRE conversation, not just the latest message):
 {{ history_summary }}
+{% else %}
+No prior conversation.
 {% endif %}
+
 Latest message: {{ message }}
 
-If user says "for me", "I want", "I need" without 
-mentioning a recipient → set gift_recipient_gender 
-based on any prior context, or leave null but set 
+If user says "for me", "I want", "I need" without
+mentioning a recipient → set gift_recipient_gender
+based on any prior context, or leave null but set
 emotional_context: "self_purchase"
 
-INTENT PRIORITY RULES (apply in this order):
-1. If message contains an order number pattern 
-   ([A-Z]{4}[0-9]{9}[A-Z]{2} or ORD-YYYY-XXXX or 
-   starts with "track") → intent = "track", always
-2. If message starts with "Order completed with order number" 
-   → intent = "order_confirmation"
-3. Never classify "track order X" as order_confirmation
+===========================================================
+INTENT PRIORITY RULES (apply in this exact order):
+===========================================================
+1. HARD OVERRIDE — track:
+   If latest message matches ANY of these → intent = "track", always,
+   even if other words suggest a different intent:
+   - Contains "track" anywhere
+   - Contains "where is my order" / "where's my order"
+   - Contains an order number pattern: VPAY[A-Z0-9]+ or ORD-[0-9]{8}-[A-Z0-9]+
+   "track order VPAY827982BA" is ALWAYS "track", never "order_confirmation".
 
-HARD PRIORITY OVERRIDE:
-Before any other classification, check these patterns:
+2. order_confirmation:
+   ONLY for messages that start with the exact prefix
+   "Order completed with order number" (or the system-triggered
+   variants listed above). Never classify "track order X" this way.
 
-If latest message matches ANY of these → intent = "track":
-- Contains "track" anywhere
-- Contains "where is my order"  
-- Contains "where's my order"
-- Contains an order number pattern:
-  VPAY[A-Z0-9]+ or ORD-[0-9]{8}-[A-Z0-9]+
-  
-This override applies even if other words suggest 
-different intent. "track order VPAY827982BA" is ALWAYS 
-"track", never "order_confirmation" or anything else.
+3. delivery:
+   If city + date/availability pattern present (see DELIVERY INTENT
+   above), or this is a follow-up city answer to a prior delivery
+   question → intent = "delivery".
 
-"order_confirmation" intent is ONLY for messages that 
-start with the exact prefix: "Order completed with order number"
+4. clarify (confirmation):
+   If short affirmation following an assistant yes/no question
+   (see CONTINUATION / CONFIRMATION DETECTION above) → intent = "clarify".
+
+5. Otherwise fall through to normal gift/search/checkout/etc. classification.
+
 is_specific_enough (boolean): evaluate using the ENTIRE conversation above.
 - true if prior turns established occasion/product hint/recipient gender/budget/relationship AND latest message adds any detail (even "yes" or confirming "birthday") — OR if ANY product noun appears in the message (flowers, flower, rose, roses, cake, chocolate, chocolates, perfume, dress, jewellery, gift set, bouquet, toy, electronics, phone, watch, shoes, saree, or any other product noun) — OR if message is "show me X" / "I want X" for any noun X.
 - false only if truly no useful signal exists anywhere yet.
@@ -55,4 +105,4 @@ requested_color: specific color requested by user (e.g. "red", "blue", "white", 
 exclude_kids (boolean): true if shopping for an adult/self and kids/baby items should be excluded, false otherwise.
 
 Output schema (strict, no extra fields):
-{"language":"...","intent":"...","occasion":"...","budget_lkr":null,"refined_query":"...","gift_recipient_gender":null,"gift_recipient_relation":null,"emotional_context":null,"order_number":null,"requested_color":null,"exclude_kids":false}
+{"language":"...","intent":"...","occasion":"...","budget_lkr":null,"refined_query":"...","gift_recipient_gender":null,"gift_recipient_relation":null,"emotional_context":null,"order_number":null,"requested_color":null,"exclude_kids":false,"delivery_city":null,"delivery_date":null}
