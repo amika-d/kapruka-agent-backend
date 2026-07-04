@@ -91,19 +91,23 @@ def _parse_order_result(raw: dict) -> dict:
     text = raw.get("result", "")
     out: dict = {"order_number": None, "total": None, "pay_link": None, "expires_at": None}
 
-    num_match = re.search(r'Order created — `([^`]+)`', text)
+    num_match = re.search(r'Order created [—:-]\s*`?([A-Z0-9\-]+)`?', text, re.IGNORECASE)
+    if not num_match:
+        num_match = re.search(r'`([A-Z0-9\-]{8,})`', text)
     if num_match:
         out["order_number"] = num_match.group(1)
 
-    total_match = re.search(r'\*\*Grand total:\*\*\s*LKR\s*([\d,]+)', text)
+    total_match = re.search(r'(?:\*\*)?(?:Grand )?[Tt]otal:(?:\*\*)?\s*(?:LKR|Rs\.?)\s*([\d,]+)', text, re.IGNORECASE)
     if total_match:
         out["total"] = float(total_match.group(1).replace(",", ""))
 
-    pay_match = re.search(r'\[Open checkout to pay\]\((https?://[^)]+)\)', text)
+    pay_match = re.search(r'\[[^\]]*(?:pay|checkout|order)[^\]]*\]\((https?://[^)]+)\)', text, re.IGNORECASE)
+    if not pay_match:
+        pay_match = re.search(r'(https?://(?:www\.)?kapruka\.com/[^\s)]+)', text, re.IGNORECASE)
     if pay_match:
         out["pay_link"] = pay_match.group(1)
 
-    expiry_match = re.search(r'expires at ([\d\-T:+]+)', text)
+    expiry_match = re.search(r'expires(?: at|:) ([\d\-T:+]+)', text, re.IGNORECASE)
     if expiry_match:
         out["expires_at"] = expiry_match.group(1)
 
@@ -200,12 +204,20 @@ async def create_checkout(payload: CheckoutPayload) -> CheckoutResult:
             gift_message=payload.gift_message,
             currency=payload.currency,
         )
-        
+        logger.info(f"RAW CREATE_ORDER RESULT: {result}")
     except Exception as e:
         logger.error(f"create_order failed: {e}")
         raise HTTPException(status_code=502, detail="Order creation failed — try again")
 
+    if result.get("result", "").startswith("Error"):
+        logger.error(f"MCP returned error: {result}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Order creation failed: {result['result']}"
+        )
+
     parsed = _parse_order_result(result)
+    logger.info(f"PARSED RESULT: {parsed}")
     db = get_session_store()
     session = db.get_session(payload.session_id)
     session["last_order_number"] = [parsed["order_number"]]

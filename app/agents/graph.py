@@ -17,7 +17,7 @@ def route_after_reflection(state: GraphState) -> str:
 
 def route_after_router(state: GraphState) -> str:
     intent = state.get("intent", "search")
-    if intent in ("greeting", "clarify"):
+    if intent in ("greeting", "clarify", "order_confirmation"):
         return "concierge"
     if intent == "checkout":
         return "checkout"

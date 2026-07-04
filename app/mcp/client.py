@@ -66,7 +66,7 @@ class KaprukaMCPClient:
             await self._exit_stack.aclose()
             raise Exception(f"MCP Tool Error ({tool_name}): {str(e)}") from e
 
-async def close(self):
+    async def close(self):
         """Gracefully shuts down the connection when the application exits."""
         if not self._session:
             return
