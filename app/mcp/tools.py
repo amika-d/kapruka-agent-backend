@@ -160,45 +160,89 @@ async def get_complementary_products(primary_category: str, occasion: Optional[s
     return {"suggestions": suggestions}
 
 
+import re
+
 def parse_order_status(raw: dict) -> dict:
+    """Parse kapruka_track_order result into the OrderTimeline component's expected shape."""
     text = raw.get("result", "")
-    status = {}
-    
-    # Order number + overall status
-    header_match = re.search(r'Order `([^`]+)` — (\w+)', text)
-    if header_match:
-        status["order_number"] = header_match.group(1)
-        status["status"] = header_match.group(2)
-    
-    # Total
-    total_match = re.search(r"Total \| \{'value': '([\d.]+)', 'currency': '(\w+)'\}", text)
+
+    # ── Error detection ────────────────────────────────────────────────────
+    error_match = re.match(r'Error \(([^)]+)\):\s*(.+)', text.strip())
+    if error_match or "Error" in text[:50]:
+        return {
+            "error": True,
+            "error_message": error_match.group(2).strip() if error_match else text[:200],
+            "order_number": None,
+            "status": "not_found",
+            "progress": []
+        }
+
+    status: dict = {
+        "error": False,
+        "order_number": None,
+        "status": None,
+        "total": None,
+        "currency": "LKR",
+        "delivery_date": None,
+        "recipient_name": None,
+        "address": None,
+        "greeting": None,
+        "progress": [],
+    }
+
+    # Order number + overall status — e.g. Order `VPAY827982BA` — Delivered
+    header = re.search(r'Order\s*`([^`]+)`\s*[—–-]+\s*(\w+)', text)
+    if header:
+        status["order_number"] = header.group(1).strip()
+        status["status"] = header.group(2).strip()
+
+    # Total — format: Total | {'value': '26060.00', 'currency': 'LKR'}
+    total_match = re.search(r"Total\s*\|\s*\{.*?'value':\s*'([\d.]+)'.*?'currency':\s*'(\w+)'", text)
     if total_match:
         status["total"] = float(total_match.group(1))
         status["currency"] = total_match.group(2)
-    
-    # Delivery date
-    date_match = re.search(r'Delivery date \| ([\d\s/A-Z]+)', text)
+
+    # Delivery date — e.g. Delivery date | 24 / JUNE / 2026
+    date_match = re.search(r'Delivery date\s*\|\s*([\d\s/A-Za-z]+)', text)
     if date_match:
         status["delivery_date"] = date_match.group(1).strip()
-    
-    # Recipient name
-    recipient_match = re.search(r'- (MS\.|MR\.|MRS\.)\s*([A-Z\s]+)', text)
+
+    # Recipient — lines starting with - MS./MR./MRS.
+    recipient_match = re.search(r'-\s*((?:MS|MR|MRS)\.?\s+[A-Z][A-Z\s]+)', text)
     if recipient_match:
-        status["recipient_name"] = recipient_match.group(0).strip().lstrip("- ")
-    
-    # Progress timeline — extract all "- TIMESTAMP — description" lines
-    progress = []
-    progress_section = text.split("**Progress**")[-1] if "**Progress**" in text else ""
-    for line in progress_section.split("\n"):
-        line = line.strip()
-        match = re.match(r'-\s*(.+?)\s*—\s*(.+)', line)
-        if match:
-            progress.append({
-                "timestamp": match.group(1).strip(),
-                "description": match.group(2).strip()
-            })
+        status["recipient_name"] = recipient_match.group(1).strip()
+
+    # Address — look for a line that looks like a Sri Lankan address
+    # Usually appears after recipient name, starts with a number or "NO."
+    addr_match = re.search(r'-\s*((?:NO\.?\s+)?[\d/]+[^\n]{10,80})', text)
+    if addr_match:
+        candidate = addr_match.group(1).strip()
+        # Skip if this looks like the recipient name match
+        if not re.match(r'(?:MS|MR|MRS)', candidate, re.I):
+            status["address"] = candidate
+
+    # Greeting / gift message
+    greeting_match = re.search(r'\*\*Greeting[:\s]*\*\*\s*(.+)', text)
+    if not greeting_match:
+        greeting_match = re.search(r'Greeting\s*\|\s*(.+)', text)
+    if greeting_match:
+        status["greeting"] = greeting_match.group(1).strip().strip('"')
+
+    # Progress timeline — after **Progress** marker
+    progress: list[dict] = []
+    if "**Progress**" in text:
+        section = text.split("**Progress**")[-1]
+        for line in section.splitlines():
+            line = line.strip()
+            # Match: - 2026-06-20 14:30 — Order placed
+            m = re.match(r'-\s*(.+?)\s*[—–-]\s*(.+)', line)
+            if m:
+                progress.append({
+                    "timestamp": m.group(1).strip(),
+                    "description": m.group(2).strip()
+                })
     status["progress"] = progress
-    
+
     return status
 
 TOOL_EXECUTOR = {
@@ -338,5 +382,6 @@ KAPRUKA_TOOL_SCHEMAS = [
                 "required": ["order_number"]
             }
         }
-    }
+    },
+    
 ]

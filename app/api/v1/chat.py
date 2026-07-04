@@ -121,9 +121,10 @@ async def event_generator(request: ChatRequest):
                     yield f"data: {json.dumps(ui_payload)}\n\n"
                     await asyncio.sleep(0)
 
-                # Stream tracking card
+                # Stream order tracking as OrderTimeline UI component
                 if node_output.get("order_status"):
-                    yield f"data: {json.dumps({'type': 'tracking_card', 'data': node_output['order_status']})}\n\n"
+                    order_status = node_output["order_status"]
+                    yield f"data: {json.dumps({'type': 'ui', 'component': 'OrderTimeline', 'props': {'orderStatus': order_status}})}\n\n"
                     await asyncio.sleep(0)
 
                 # Stream pay link

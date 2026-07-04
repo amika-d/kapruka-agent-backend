@@ -4,19 +4,10 @@ Detect: language, intent, occasion, budget_lkr, refined_query.
 LANGUAGE: Sinhala unicode (U+0D80–U+0DFF) + English = tanglish. Only Sinhala = sinhala. Otherwise = english.
 Examples: "mama phone ekak ganna"=tanglish/search | "Ammi ta saree ekak"=tanglish/gift | "මේකේ price කීයද"=tanglish/search | "I need flowers"=english/gift | "මල් ටිකක් ඕනෙ"=sinhala/gift
 
-INTENT options: search, gift, track, checkout, image_search, greeting, delivery, budget, clarify
+INTENT options: search, gift, track, checkout, image_search, greeting, delivery, budget, clarify, order_confirmation
 - checkout: explicit purchase intent ("checkout", "buy this", "let's order", "pay now", buy/order/pay/proceed)
 - track: asking about existing order ("where's my order", "track my package", or contains order number pattern) — extract order number (e.g. VPAY827982BA) into order_number
-
-
-{% if intent == "order_confirmation" %}
-The user just successfully placed order {{ order_number }} 
-for LKR {{ total }}. Write a warm, brief confirmation. 
-Mention they can track it anytime by asking — don't give 
-technical instructions, just make it feel natural. 
-Offer to help find something else if they want to 
-continue shopping.
-{% endif %}
+- order_confirmation: If the message starts with "Order completed with order number" or "I just placed order #" or "[System: User just completed order #" — set intent to "order_confirmation" and extract the order number into order_number. This is a system-triggered internal message, not a user shopping request.
 
 OCCASION options: vesak, avurudhu, birthday, anniversary, christmas, new_year, everyday, null
 
@@ -31,6 +22,30 @@ mentioning a recipient → set gift_recipient_gender
 based on any prior context, or leave null but set 
 emotional_context: "self_purchase"
 
+INTENT PRIORITY RULES (apply in this order):
+1. If message contains an order number pattern 
+   ([A-Z]{4}[0-9]{9}[A-Z]{2} or ORD-YYYY-XXXX or 
+   starts with "track") → intent = "track", always
+2. If message starts with "Order completed with order number" 
+   → intent = "order_confirmation"
+3. Never classify "track order X" as order_confirmation
+
+HARD PRIORITY OVERRIDE:
+Before any other classification, check these patterns:
+
+If latest message matches ANY of these → intent = "track":
+- Contains "track" anywhere
+- Contains "where is my order"  
+- Contains "where's my order"
+- Contains an order number pattern:
+  VPAY[A-Z0-9]+ or ORD-[0-9]{8}-[A-Z0-9]+
+  
+This override applies even if other words suggest 
+different intent. "track order VPAY827982BA" is ALWAYS 
+"track", never "order_confirmation" or anything else.
+
+"order_confirmation" intent is ONLY for messages that 
+start with the exact prefix: "Order completed with order number"
 is_specific_enough (boolean): evaluate using the ENTIRE conversation above.
 - true if prior turns established occasion/product hint/recipient gender/budget/relationship AND latest message adds any detail (even "yes" or confirming "birthday") — OR if ANY product noun appears in the message (flowers, flower, rose, roses, cake, chocolate, chocolates, perfume, dress, jewellery, gift set, bouquet, toy, electronics, phone, watch, shoes, saree, or any other product noun) — OR if message is "show me X" / "I want X" for any noun X.
 - false only if truly no useful signal exists anywhere yet.

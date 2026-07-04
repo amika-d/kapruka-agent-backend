@@ -75,6 +75,20 @@ Color examples:
   white/blue/green variants
 - "red roses" → q="red roses", not pink/yellow
 
+LITERAL PRODUCT DETECTION — HIGHEST PRIORITY:
+If the user's message contains an explicit product noun, 
+ALWAYS search for that exact product first, regardless 
+of occasion or recipient context.
+
+"birthday cake" → q="birthday cake", category="cakes"
+"flowers" → q="flowers", category="flowers"  
+"saree" → q="saree", category="Clothing"
+
+The occasion/recipient context refines the search — 
+it never overrides the explicit product request.
+Never substitute a greeting card for a product the 
+user explicitly named.
+
 Gender/age context:
 {% if gift_recipient_gender == "male" or 
       emotional_context == "self_purchase_male" %}
@@ -98,6 +112,7 @@ than 8 mixed ones.
 Multimodal Vision Context:
 The user has provided an image described as: {{ image_context }}. Use this visual payload to infer the precise product category and structural keyword.
 {% endif %}
+
 
 Query Normalization Mapping (Bilingual to Database Token Execution):
 - "Ammi saree" → q="saree", category="clothing"
