@@ -23,17 +23,18 @@ class GraphState(TypedDict):
     reflection_count: int
     thinking_steps: Annotated[List[Dict[str, Any]], operator.add]
     final_response: Optional[str]
+    delivery_result: Optional[Dict[str, Any]]
     # Checkout fields
     recipient: Optional[Dict[str, Any]]
     sender: Optional[Dict[str, Any]]
     gift_message: Optional[str]
     pay_link: Optional[str]
     cart_issues: Optional[List[str]]
+    has_confirmed_order: Optional[bool]
+    wants_note: Optional[bool]
+    post_order_addon: Optional[bool]
     # Tracking fields
     order_status: Optional[Dict[str, Any]]
-    recipient: Optional[Dict[str, Any]]
-    sender: Optional[Dict[str, Any]]
-    gift_message: Optional[str]
     # Search quality
     rejected_products: List[str]
     requested_color: Optional[str]

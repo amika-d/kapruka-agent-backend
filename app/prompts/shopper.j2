@@ -90,8 +90,8 @@ Never substitute a greeting card for a product the
 user explicitly named.
 
 {% if emotional_context == "apology" or 
-      "forgot" in refined_query or 
-      "dead" in refined_query %}
+      (refined_query and "forgot" in refined_query) or 
+      (refined_query and "dead" in refined_query) %}
 URGENCY + APOLOGY CONTEXT:
 User is panicking about a forgotten occasion.
 Prioritize in this order:
@@ -117,18 +117,18 @@ EXCLUDE: men's specific items unless explicitly requested.
 If no gender specified and user says "for me" or "I want" 
 — treat as adult, exclude kids/baby items entirely.
 {% endif %}
-DELIVERY INTENT — detect these patterns:
-- "check delivery" / "check whether available"
-- "can you deliver" / "deliver to [city]"
-- "available in [city]" / "available for [date]"
-- Message contains both a city name AND a date reference 
-  (tomorrow, today, Friday, next week)
-
-If BOTH city AND date/delivery reference present → 
-intent = "delivery", always, even if phrased as a question.
-
-"check whether its available for tomorrow in Kandy" 
-→ intent: "delivery", NOT "search"
+TOOL EXECUTION BRANCHING:
+{% if delivery_city %}
+{% if refined_query %}
+- BOTH product search ("{{ refined_query }}") AND delivery check (to {{ delivery_city }}{% if delivery_date %} on {{ delivery_date }}{% endif %}) are required!
+- You MUST call BOTH `kapruka_search_products` AND `kapruka_check_delivery` (using city="{{ delivery_city }}" and delivery_date="{{ delivery_date if delivery_date else '2026-07-06' }}") in your tool calls!
+{% else %}
+- ONLY delivery check is required. You MUST NOT call `kapruka_search_products` or `kapruka_get_product`.
+- Call `kapruka_check_delivery` using city="{{ delivery_city }}" and delivery_date="{{ delivery_date if delivery_date else '2026-07-06' }}".
+{% endif %}
+{% else %}
+- Product search/gifting. Execute product search and detail fetching tools (`kapruka_search_products` and `kapruka_get_product`).
+{% endif %}
 
 ALWAYS exclude items that contradict the stated 
 attributes. Better to return 3 highly relevant items 

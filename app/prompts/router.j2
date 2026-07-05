@@ -4,7 +4,7 @@ Detect: language, intent, occasion, budget_lkr, refined_query.
 LANGUAGE: Sinhala unicode (U+0D80–U+0DFF) + English = tanglish. Only Sinhala = sinhala. Otherwise = english.
 Examples: "mama phone ekak ganna"=tanglish/search | "Ammi ta saree ekak"=tanglish/gift | "මේකේ price කීයද"=tanglish/search | "I need flowers"=english/gift | "මල් ටිකක් ඕනෙ"=sinhala/gift
 
-INTENT options: search, gift, track, checkout, image_search, greeting, delivery, budget, clarify, order_confirmation
+INTENT options: search, gift, track, checkout, image_search, greeting, budget, clarify, order_confirmation
 
 {% if history_summary and history_summary != "No prior conversation." %}
 Recent conversation (evaluate specificity and intent using the ENTIRE conversation, not just the latest message):
@@ -21,39 +21,86 @@ If the latest message matches ANY of these → intent = "track":
 - Contains an order number pattern: VPAY[A-Z0-9]+ or ORD-[0-9]{8}-[A-Z0-9]+
 Extract the order number into order_number.
 "track order VPAY827982BA" is ALWAYS "track" — never "order_confirmation", never anything else.
+CRITICAL NEGATIVE RULE: Do NOT classify as "track" if the user is asking about delivery availability to a city or general shipping availability (e.g., "do you deliver to Kandy?", "check delivering to Kottawa tomorrow", "can you check delivery"). That is NOT order tracking! If no order number is provided and the user is asking about delivery availability, you MUST follow Section 5 (DELIVERY INFORMATION EXTRACTION) and set intent = "search" (or "gift").
 
 2. ORDER_CONFIRMATION
 Only if the message starts with the exact prefix "Order completed with order number" or "I just placed order #" or "[System: User just completed order #".
 This is a system-triggered internal message, not a user shopping request. Extract the order number into order_number.
 
-3. CONTINUATION / CONFIRMATION
+3. CONTINUATION / COMPOUND FOLLOW-UP
 Check history before classifying anything below this line.
-If the latest message is a short affirmation (yeah, yes, ok, sure, yep, do it, sounds good, go ahead) AND the previous assistant message in history ended with a yes/no question:
-→ intent = "clarify"
-→ Do NOT search for new products
-→ Let the concierge handle the confirmation naturally from context
+If the latest message is a short affirmation (yeah, yes, ok, sure, yep, do it, sounds good, go ahead) AND the previous assistant message ended with a yes/no question:
+→ classify by WHAT is being confirmed, using the previous assistant message as context (e.g. if assistant asked "want a card too?" and user says "yes add a card" → continue gift/search flow).
+→ Do NOT restart as a fresh, context-less search. Carry forward signals in refined_query.
 
-4. DELIVERY
-Detect these patterns:
-- "check delivery" / "check whether available"
-- "can you deliver" / "deliver to [city]"
-- "available in [city]" / "available for [date]"
-- Message contains both a city name AND a date reference (tomorrow, today, Friday, next week)
-If BOTH city AND date/delivery reference are present → intent = "delivery", always, even if phrased as a question.
-Example: "check whether its available for tomorrow in Kandy" → intent: "delivery", NOT "search"
+5. POST-ORDER CROSS-SELL / RE-ENGAGEMENT
+{% if has_confirmed_order %}
+An order has already been confirmed in this session (has_confirmed_order = true).
+If the latest message introduces new product interest (e.g. "she likes perfume", "should I add something else") → intent = "gift" (or "search" if self-purchase), but:
+- Reuse known session context (delivery_city, delivery_date, gift_recipient_gender/relation) — do NOT re-ask for info already established
+- Set a flag: post_order_addon = true
+{% else %}
+If an order_confirmation has already occurred earlier in this session (check history) AND the latest message introduces new product interest → intent = "gift" (or "search"), set post_order_addon = true.
+{% endif %}
 
+5. DELIVERY INFORMATION EXTRACTION
+There is NO separate "delivery" intent! Whenever the user mentions a city, shipping fee, delivery date, or availability (e.g., "check delivery to Kandy tomorrow", "i want flowers to Kandy tomorrow", "do you deliver to Kottawa?"):
+- Extract the city into delivery_city and any date into delivery_date (resolve "tomorrow"/"today" to YYYY-MM-DD).
+- If a product is requested or mentioned (e.g. "flowers", "cake", "chocolates", "rice", "i want [item]"), set intent = "search" (or "gift") and extract the product into refined_query.
+- If NO product is mentioned at all (e.g. just "check delivery to Kandy tomorrow"), set intent = "search" (or "gift" if gifting context) and leave refined_query = null.
+- The Shopper node will automatically execute the delivery check tool whenever delivery_city is present!
+
+COMPOUND MESSAGE HANDLING:
+When a message contains BOTH a product request AND 
+a delivery/city/date signal — extract both, set 
+intent to "search" (primary), and populate 
+delivery_city + delivery_date fields.
+
+The shopper will handle both the search AND the 
+delivery check in one turn.
+
+NEVER discard either signal. Both must appear in output.
+
+Examples:
+"find chocolates and check delivery to Kottawa tomorrow"
+→ intent: "search", refined_query: "chocolates",
+  delivery_city: "Kottawa", delivery_date: "2026-07-07"
+
+"I need a phone charger delivered to Nugegoda by today"
+→ intent: "search", refined_query: "phone charger",
+  delivery_city: "Nugegoda", delivery_date: "2026-07-05"
+
+"check delivery to Kandy tomorrow" (no product mentioned)
+→ intent: "delivery", delivery_city: "Kandy",
+  delivery_date: "2026-07-06", refined_query: null
+
+"check delivery to Kandy tomorrow for the flowers"
+→ intent: "search", refined_query: "flowers",
+  delivery_city: "Kandy", delivery_date: "2026-07-06"
 City follow-up case: if the previous assistant message asked for the delivery city, AND the latest user message contains a city name → intent = "delivery". Extract the city into delivery_city, and any date reference into delivery_date (resolve "tomorrow"/"today" to YYYY-MM-DD).
-Example:
-  Assistant: "Where does she live?"
-  User: "she's in Kandy, tomorrow evening ideally"
-  → intent: "delivery", delivery_city: "Kandy", delivery_date: <tomorrow's date>
 
-5. CHECKOUT
-Explicit purchase intent: "checkout", "buy this", "let's order", "pay now", buy/order/pay/proceed.
+7. CHECKOUT
+Only classify as "checkout" if EITHER:
+- The message is explicit checkout-flow language: "checkout", "how do I pay", 
+  "let's finalize", "place the order", "proceed to payment", "buy this now"
+- OR cart_count > 0 already AND the message signals completing the purchase
 
-6. GIFT / SEARCH
+Do NOT classify as checkout just because "order" appears as a plain verb meaning 
+"get me" / "purchase" in a first-time product request. A fresh request naming 
+items to buy is "search", not "checkout" — there's no cart to check out yet.
+
+Examples:
+"order rice and dhal, 5kg each" → intent: search, refined_query: "rice dhal 5kg", 
+  occasion: everyday, emotional_context: null
+(NOT checkout — this is the initial product request, no cart exists)
+
+"checkout" / "how do I pay" / "let's finalize this" (cart_count > 0) → intent: checkout
+"buy this now" (referring to a shown product) → intent: checkout
+
+8. GIFT / SEARCH
 is_specific_enough (boolean): evaluate using the ENTIRE conversation above.
 - true if prior turns established occasion/product hint/recipient gender/budget/relationship AND the latest message adds any detail (even "yes" or confirming "birthday") — OR if ANY product noun appears in the message (flowers, flower, rose, roses, cake, chocolate, chocolates, perfume, dress, jewellery, gift set, bouquet, toy, electronics, phone, watch, shoes, saree, or any other product noun) — OR if the message is "show me X" / "I want X" for any noun X.
+- Emotional distress + occasion word, even with NO product noun (e.g. "machan I'm dead, forgot anniversary tomorrow help") → also counts as specific enough to proceed, but set intent = "clarify" so concierge can ask the one clarifying question (her preferences) before searching — do not search yet, but DO capture occasion and emotional_context immediately.
 - false only if truly no useful signal exists anywhere yet.
 - If false, set intent to "clarify" instead of "gift"/"search".
 
@@ -61,8 +108,28 @@ OCCASION options: vesak, avurudhu, birthday, anniversary, christmas, new_year, e
 
 If user says "for me", "I want", "I need" without mentioning a recipient → set gift_recipient_gender based on any prior context, or leave null but set emotional_context: "self_purchase"
 
+emotional_context options (non-exhaustive, pick closest): apology, forgot, urgent, self_purchase, celebratory, null
+
 requested_color: specific color requested by user (e.g. "red", "blue", "white", "green", "pink", "olive", "yellow", "grey", "black") or null.
 exclude_kids (boolean): true if shopping for an adult/self and kids/baby items should be excluded, false otherwise.
 
+NON-GIFT / EVERYDAY SCENARIOS (Kapruka is not only about gifting — most users 
+are shopping for themselves):
+
+"need a new blender, mine broke" → intent: search, emotional_context: self_purchase, 
+  occasion: everyday, gift_recipient_gender: null
+
+"order rice and dhal, 5kg each" → intent: search, occasion: everyday, 
+  emotional_context: null (practical restock, no emotional framing needed)
+
+"what electronics do you have on sale" → intent: search, occasion: everyday, 
+  emotional_context: null
+
+CRITICAL RULE FOR refined_query: Never output null for refined_query when intent is "search" or "gift"! If the user mentions a specific item (e.g. "cake", "flowers", "charger"), extract it. If the user asks for general gifts without naming a specific item (e.g. "gifts for girlfriend", "something nice for birthday"), set refined_query to a helpful search keyword based on recipient/occasion (e.g. "chocolates flowers gift box", "birthday gift", "gift set").
+
+"I need a phone charger delivered to Nugegoda by today" → intent: search 
+  (city + date present) and refined_query is "phone charger" so shopper 
+  can search AND check delivery together. emotional_context: self_purchase.
+
 Output schema (strict, no extra fields):
-{"language":"...","intent":"...","occasion":"...","budget_lkr":null,"refined_query":"...","gift_recipient_gender":null,"gift_recipient_relation":null,"emotional_context":null,"order_number":null,"delivery_city":null,"delivery_date":null,"requested_color":null,"exclude_kids":false}
+{"language":"...","intent":"...","occasion":"...","budget_lkr":null,"refined_query":"...","gift_recipient_gender":null,"gift_recipient_relation":null,"emotional_context":null,"order_number":null,"delivery_city":null,"delivery_date":null,"requested_color":null,"exclude_kids":false,"wants_note":false,"post_order_addon":false}

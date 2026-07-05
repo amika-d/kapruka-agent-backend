@@ -1,13 +1,17 @@
+import os
 from pydantic_settings import BaseSettings
 import yaml
 from pathlib import Path
+
 
 def load_yaml_config() -> dict:
     config_path = Path(__file__).parent.parent.parent / "config.yaml"
     with open(config_path) as f:
         return yaml.safe_load(f)
 
+
 yaml_config = load_yaml_config()
+
 
 class Settings(BaseSettings):
     openrouter_api_key: str
@@ -38,8 +42,10 @@ class Settings(BaseSettings):
         return yaml_config["models"]["vision"]
 
     @property
-    def tryon_url(self) -> str:
-        return yaml_config["tryon"]["fal_url"]
+    def tryon_app_id(self) -> str:
+        # was tryon_url — fal_client takes an app id ("fal-ai/...")
+        # rather than a REST URL, so this is no longer a full endpoint.
+        return yaml_config["tryon"]["fal_app_id"]
 
     @property
     def tryon_timeout(self) -> int:
@@ -55,3 +61,12 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# fal_client reads the key from the FAL_KEY environment variable itself —
+# it has no per-call "pass the key as an argument" option — so whatever
+# key we resolved from either env var name needs to actually land in
+# os.environ under the name fal_client expects. Doing this once here at
+# import time means every fal_client call downstream just works without
+# threading the key through every request.
+if settings.effective_fal_key:
+    os.environ.setdefault("FAL_KEY", settings.effective_fal_key)

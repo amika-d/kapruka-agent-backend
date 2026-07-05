@@ -90,4 +90,5 @@ async def checkout_node(state: GraphState) -> dict:
         "pay_link": pay_link,
         "cart_issues": validation["issues"] or None,
         "thinking_steps": thinking,
+        "has_confirmed_order": True,
     }

@@ -85,7 +85,8 @@ async def concierge_node(state: GraphState) -> dict:
         intent=state.get("intent"),
         products_exist=products_exist,
         product_names=product_names,
-        recent_context=recent_context
+        recent_context=recent_context,
+        delivery_result=state.get("delivery_result")
     )
 
     llm_messages = [{"role": "system", "content": prompt}]

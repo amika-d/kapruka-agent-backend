@@ -245,6 +245,19 @@ def parse_order_status(raw: dict) -> dict:
 
     return status
 
+def parse_delivery_result(raw: dict) -> dict:
+    text = raw.get("result", "")
+    result = {"available": False, "fee_lkr": None, "city": None, "date": None}
+    
+    if "Available" in text or "available" in text:
+        result["available"] = True
+    
+    fee_match = re.search(r'LKR\s*([\d,]+)', text)
+    if fee_match:
+        result["fee_lkr"] = float(fee_match.group(1).replace(",", ""))
+    
+    return result
+
 TOOL_EXECUTOR = {
     "kapruka_search_products": kapruka_search_products,
     "kapruka_get_product": kapruka_get_product,
@@ -254,6 +267,8 @@ TOOL_EXECUTOR = {
     "kapruka_create_order": kapruka_create_order,
     "kapruka_track_order": kapruka_track_order
 }
+
+
 
 KAPRUKA_TOOL_SCHEMAS = [
     {
@@ -306,6 +321,7 @@ KAPRUKA_TOOL_SCHEMAS = [
             }
         }
     },
+    
     {
         "type": "function",
         "function": {
@@ -385,3 +401,15 @@ KAPRUKA_TOOL_SCHEMAS = [
     },
     
 ]
+SHOPPER_TOOL_NAMES = {
+    "kapruka_search_products",
+    "kapruka_get_product",
+    "kapruka_list_categories",
+    "kapruka_check_delivery"
+}
+
+# 2. Loop through the main schema list and extract only the matches
+SHOPPER_TOOL_SCHEMA = []
+for tool in KAPRUKA_TOOL_SCHEMAS:
+    if tool["function"]["name"] in SHOPPER_TOOL_NAMES:
+        SHOPPER_TOOL_SCHEMA.append(tool)

@@ -3,10 +3,9 @@ import logging
 from openai import AsyncOpenAI
 from app.agents.state import GraphState
 from app.mcp.tools import (
-    KAPRUKA_TOOL_SCHEMAS, kapruka_search_products, kapruka_get_product, 
-    kapruka_list_categories, kapruka_list_delivery_cities, kapruka_check_delivery, 
-    kapruka_create_order, kapruka_track_order, parse_search_results,
-    parse_product_detail
+    kapruka_search_products, kapruka_get_product, 
+    kapruka_list_categories, kapruka_check_delivery, 
+    parse_search_results, parse_delivery_result, SHOPPER_TOOL_SCHEMA,parse_product_detail
 )
 from app.core.config import settings
 from app.core.database import SessionStore
@@ -24,10 +23,8 @@ TOOL_MAP = {
     "kapruka_search_products": kapruka_search_products,
     "kapruka_get_product": kapruka_get_product,
     "kapruka_list_categories": kapruka_list_categories,
-    "kapruka_list_delivery_cities": kapruka_list_delivery_cities,
-    "kapruka_check_delivery": kapruka_check_delivery,
-    "kapruka_create_order": kapruka_create_order,
-    "kapruka_track_order": kapruka_track_order
+    
+    "kapruka_check_delivery": kapruka_check_delivery
 }
 
 from app.core.database import get_session_store
@@ -63,20 +60,31 @@ def is_relevant(product: dict, intent_context: dict) -> bool:
         other_colors = [c for c in color_variants if c != requested_color]
         if any(c in name.lower() for c in other_colors):
             return False
+
+    # Filter out bakery cakes / food when query or image_context is clearly not food/cake
+    query_text = f"{intent_context.get('query') or ''} {intent_context.get('image_context') or ''}".lower()
+    if not any(k in query_text for k in ["cake", "ribbon", "gateau", "torte", "food", "grocery", "sweet", "chocolate", "kavum", "kokis", "hamper", "eat"]):
+        if any(k in name for k in ["cake", "ribbon cake", "gateau", "torte"]):
+            return False
     
     return True
 
 
 async def shopper_node(state: GraphState) -> dict:
+    session_id = state.get("session_id")
     messages = state.get("messages", [])
     my_steps = []
-    search_results = []  # always fresh, never carried over from state
-    session_id = state.get("session_id", "default")
+    search_results = state.get("search_results", [])
+    
+    logger.info(f"🟢 [SHOPPER] Starting shopper_node for session '{session_id}'. Refined query: '{state.get('refined_query')}'")
+
 
     session_data = db.get_session(session_id)
     rejected_products = session_data.get("rejected_products", [])
 
     intent_context = {
+        "query": state.get("refined_query"),
+        "image_context": state.get("image_context"),
         "requested_color": state.get("requested_color"),
         "exclude_kids": state.get("exclude_kids") or (
             state.get("gift_recipient_gender") in ["male", "female"]
@@ -99,19 +107,23 @@ async def shopper_node(state: GraphState) -> dict:
         occasion=state.get("occasion"),
         budget_lkr=state.get("budget_lkr"),
         delivery_city=state.get("delivery_city"),
+        delivery_date=state.get("delivery_date"),
         gift_recipient_gender=state.get("gift_recipient_gender"),
         gift_recipient_relation=state.get("gift_recipient_relation"),
         emotional_context=state.get("emotional_context"),
         rejected_products=rejected_products,
         image_context=state.get("image_context"),
         language=state.get("language", "english"),
-        top_level_categories=categories
+        top_level_categories=categories,
+        refined_query=state.get("refined_query")
     )
 
     formatted_messages.insert(0, {
         "role": "system",
         "content": system_prompt
     })
+
+    delivery_result = state.get("delivery_result")
 
     max_loops = 6
     loops = 0
@@ -121,11 +133,13 @@ async def shopper_node(state: GraphState) -> dict:
             break
         loops += 1
         try:
+            logger.info(f"⏳ [SHOPPER] Loop {loops}/{max_loops}: Calling OpenRouter ({settings.model_shopper})...")
             response = await client.chat.completions.create(
                 model=settings.model_shopper,
                 messages=formatted_messages,
-                tools=KAPRUKA_TOOL_SCHEMAS
+                tools=SHOPPER_TOOL_SCHEMA
             )
+
 
             message = response.choices[0].message
             formatted_messages.append({
@@ -150,6 +164,7 @@ async def shopper_node(state: GraphState) -> dict:
             for tool_call in message.tool_calls:
                 fn_name = tool_call.function.name
                 args = json.loads(tool_call.function.arguments)
+                logger.info(f"🔧 [SHOPPER] Executing tool: '{fn_name}' with args: {args}")
 
                 my_steps.append({
                     "type": "thinking", "step": fn_name,
@@ -165,6 +180,10 @@ async def shopper_node(state: GraphState) -> dict:
                                     if r.get("product_id") not in rejected_products
                                     and is_relevant(r, intent_context)]
                         search_results.extend(filtered)
+                        
+                    elif fn_name == "kapruka_check_delivery":
+                        delivery_result = parse_delivery_result(result)
+
                     elif fn_name == "kapruka_get_product":
                         detail = parse_product_detail(result)
                         for p in search_results:
@@ -175,7 +194,9 @@ async def shopper_node(state: GraphState) -> dict:
                 else:
                     result = {"error": "Unknown tool"}
 
+                logger.info(f"✅ [SHOPPER] Tool '{fn_name}' completed. Total search results so far: {len(search_results)}")
                 my_steps[-1]["status"] = "done"
+
 
                 formatted_messages.append({
                     "role": "tool",
@@ -221,5 +242,6 @@ async def shopper_node(state: GraphState) -> dict:
 
     return {
         "search_results": search_results,
-        "thinking_steps": my_steps
+        "thinking_steps": my_steps,
+        "delivery_result": delivery_result
     }

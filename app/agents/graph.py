@@ -6,25 +6,30 @@ from app.agents.nodes.shopper import shopper_node
 from app.agents.nodes.reflection import reflection_node
 from app.agents.nodes.concierge import concierge_node
 from app.agents.nodes.tracking import tracking_node
+import logging
 from app.agents.nodes.checkout import checkout_node
+
+logger = logging.getLogger(__name__)
 
 
 def route_after_reflection(state: GraphState) -> str:
-    if state.get("reflection_needed"):
-        return "shopper"
-    return "concierge"
+    dest = "shopper" if state.get("reflection_needed") else "concierge"
+    logger.info(f"🔀 [ROUTING] route_after_reflection -> Routing to '{dest}'")
+    return dest
 
 
 def route_after_router(state: GraphState) -> str:
     intent = state.get("intent", "search")
     if intent in ("greeting", "clarify", "order_confirmation"):
-        return "concierge"
-    if intent == "checkout":
-        return "checkout"
-    if intent == "track":
-        return "tracking"
-    # search, gift, delivery, budget, image_search → all go to shopper
-    return "shopper"
+        dest = "concierge"
+    elif intent == "checkout":
+        dest = "checkout"
+    elif intent == "track":
+        dest = "tracking"
+    else:
+        dest = "shopper"
+    logger.info(f"🔀 [ROUTING] route_after_router (intent='{intent}') -> Routing to '{dest}'")
+    return dest
 
 
 workflow = StateGraph(GraphState)

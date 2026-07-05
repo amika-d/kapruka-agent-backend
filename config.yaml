@@ -12,7 +12,7 @@ models:
 
   # User-facing personality is ~65% of the judging rubric — don't cut cost here
   # concierge: "google/gemini-2.5-flash"
-  concierge: "google/gemini-3.1-flash-lite"
+  concierge: "openai/gpt-4o-mini"
 
 
 kapruka:
@@ -21,7 +21,7 @@ kapruka:
   cache_ttl_minutes: 30
 
 tryon:
-  fal_url: "https://fal.run/fal-ai/image-apps-v2/virtual-try-on"
+  fal_app_id: "fal-ai/kling/v1-5/kolors-virtual-try-on"
   timeout_seconds: 90
 
 memory:
