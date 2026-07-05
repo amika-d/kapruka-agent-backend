@@ -1,6 +1,6 @@
 
 models:
-  router: "openai/gpt-5-nano"
+  router: "openai/gpt-4o-mini"
   reflection: "openai/gpt-4o-mini"
 
   # Keep Sonnet here because its tool-calling (Kapruka MCP) and Vision are flawless
@@ -19,6 +19,10 @@ kapruka:
   mcp_url: "https://mcp.kapruka.com/mcp"
   rate_limit_rpm: 60
   cache_ttl_minutes: 30
+
+tryon:
+  fal_url: "https://fal.run/fal-ai/image-apps-v2/virtual-try-on"
+  timeout_seconds: 90
 
 memory:
   session_ttl_hours: 2
