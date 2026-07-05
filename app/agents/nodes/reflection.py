@@ -19,6 +19,20 @@ async def reflection_node(state: GraphState) -> dict:
     
     if reflection_count >= 2:
         return {"reflection_needed": False, "reflection_count": reflection_count}
+
+    # If no product search was requested or executed (e.g. delivery check or status query), pass immediately!
+    if not state.get("refined_query") and not state.get("image_context") and not search_results:
+        my_steps.append({
+            "type": "thinking",
+            "step": "Reflection",
+            "detail": "Delivery/status check — no product search required.",
+            "status": "done"
+        })
+        return {
+            "reflection_needed": False,
+            "reflection_count": reflection_count,
+            "thinking_steps": my_steps
+        }
         
     summary = ""
     if not search_results and reflection_count >= 1:

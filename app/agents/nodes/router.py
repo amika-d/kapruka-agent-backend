@@ -41,7 +41,8 @@ async def router_node(state: GraphState) -> dict:
         prompt_content = render_prompt(
             "router",
             message=latest_message,
-            history_summary=context
+            history_summary=context,
+            has_confirmed_order=state.get("has_confirmed_order", False)
         )
 
         response = await client.chat.completions.create(
@@ -81,23 +82,34 @@ async def router_node(state: GraphState) -> dict:
         state_update: dict = {
             "language": lang,
             "intent": intent,
-            "occasion": result.get("occasion"),
-            "budget_lkr": result.get("budget_lkr"),
-            "gift_recipient_gender": result.get("gift_recipient_gender"),
-            "gift_recipient_relation": result.get("gift_recipient_relation"),
-            "emotional_context": result.get("emotional_context"),
-            "requested_color": result.get("requested_color"),
-            "exclude_kids": result.get("exclude_kids", False),
+            "refined_query": result.get("refined_query"),
             "thinking_steps": my_steps,
             "reflection_needed": False,
             "reflection_count": 0,
-            "search_results": []
+            "search_results": [],
+            "wants_note": result.get("wants_note", False),
+            "post_order_addon": result.get("post_order_addon", False),
         }
+
+        # Only overwrite sticky state fields if the LLM returned a non-null value this turn
+        sticky_fields = [
+            "occasion", "budget_lkr", "gift_recipient_gender",
+            "gift_recipient_relation", "emotional_context", "requested_color",
+            "delivery_city", "delivery_date"
+        ]
+        for field in sticky_fields:
+            val = result.get(field)
+            if val is not None:
+                state_update[field] = val
+
+        if "exclude_kids" in result and result["exclude_kids"] is not None:
+            state_update["exclude_kids"] = result["exclude_kids"]
 
         # For tracking intent: inject order number into messages so tracking_node can regex it
         if intent == "track" and order_number:
             state_update["messages"] = [{"role": "system", "content": f"ORDER_NUMBER:{order_number}"}]
 
+        logger.info(f"🧭 [ROUTER OUTPUT] Intent: '{intent}' | Query: '{result.get('refined_query')}' | City: '{result.get('delivery_city')}' | Date: '{result.get('delivery_date')}' | Occasion: '{result.get('occasion')}' | Emotion: '{result.get('emotional_context')}'")
         return state_update
     except Exception as e:
         logger.error(f"Router error: {e}")

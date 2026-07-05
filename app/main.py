@@ -15,6 +15,12 @@ from app.core.database import get_session_store
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+class EndpointFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/api/v1/sessions" not in record.getMessage()
+
+logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialise category cache

@@ -86,6 +86,8 @@ class SessionStore:
             "browsed_products": [],
             "rejected_products": [],
             "last_query": None,
+            "last_image_context": None,
+            "last_image_base64": None,
             "last_accessed": time.time()
         }
         self._sessions[session_id] = new_session

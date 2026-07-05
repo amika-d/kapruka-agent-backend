@@ -10,6 +10,9 @@ from app.core.config import settings
 from app.core.prompt_loader import render_prompt
 from openai import AsyncOpenAI
 from uuid import uuid4
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 from app.core.database import get_session_store
@@ -58,23 +61,38 @@ async def event_generator(request: ChatRequest):
             await asyncio.sleep(0)
             try:
                 image_context = await extract_vision_context(request.image_base64)
-                detail_preview = image_context[:80] + "..." if len(image_context) > 80 else image_context
-                yield f"data: {json.dumps({'type': 'thinking', 'step': 'Vision', 'detail': detail_preview, 'status': 'done'})}\n\n"
+                clean_detail = "Analyzed image details"
+                try:
+                    raw_json = image_context.replace("```json", "").replace("```", "").strip()
+                    parsed_vision = json.loads(raw_json)
+                    cat = parsed_vision.get("category", "")
+                    attrs = ", ".join(parsed_vision.get("attributes", [])[:3])
+                    if cat and attrs:
+                        clean_detail = f"Identified {cat}: {attrs}"
+                    elif cat:
+                        clean_detail = f"Identified {cat}"
+                    elif attrs:
+                        clean_detail = f"Detected: {attrs}"
+                except Exception:
+                    clean_detail = image_context[:60] + "..." if len(image_context) > 60 else image_context
+                yield f"data: {json.dumps({'type': 'thinking', 'step': 'Vision', 'detail': clean_detail, 'status': 'done'})}\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'thinking', 'step': 'Vision', 'detail': f'Vision analysis failed: {str(e)}', 'status': 'error'})}\n\n"
             await asyncio.sleep(0)
         
         # Build initial state
+        user_msg_state = {"role": "user", "content": request.message}
+        if request.image_base64:
+            user_msg_state["imageBase64"] = request.image_base64
+
         initial_state = {
-            "messages": session["messages"] + [
-                {"role": "user", "content": request.message}
-            ],
+            "messages": session["messages"] + [user_msg_state],
             "session_id": request.session_id,
             "cart": request.cart or [],
             "language": "english",
             "occasion": None,
             "intent": None,
-            "image_context": image_context,
+            "image_context": image_context or session.get("last_image_context"),
             "delivery_city": session.get("delivery_city"),
             "delivery_date": None,
             "search_results": [],
@@ -99,6 +117,7 @@ async def event_generator(request: ChatRequest):
             stream_mode="updates"
         ):
             for node_name, node_output in event.items():
+                logger.info(f"📦 [GRAPH STREAM] Node completed: '{node_name}'")
                 
                 # Stream thinking steps as they come
                 for step in node_output.get("thinking_steps", []):
@@ -155,9 +174,11 @@ async def event_generator(request: ChatRequest):
                         await asyncio.sleep(0.04)
         
         # Update session memory
-        store.append_message(request.session_id, {
-            "role": "user", "content": request.message
-        })
+        user_msg_store = {"role": "user", "content": request.message}
+        if request.image_base64:
+            user_msg_store["imageBase64"] = request.image_base64
+            store.update_session(request.session_id, last_image_context=image_context, last_image_base64=request.image_base64)
+        store.append_message(request.session_id, user_msg_store)
         if final_text or collected_thinking or last_ui_payload:
             assistant_msg = {
                 "role": "assistant",
@@ -172,6 +193,7 @@ async def event_generator(request: ChatRequest):
         yield "data: [DONE]\n\n"
 
     except Exception as e:
+        logger.error(f"Error in chat stream: {e}", exc_info=True)
         yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
 @router.post("/chat")
