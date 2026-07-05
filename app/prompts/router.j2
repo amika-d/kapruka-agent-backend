@@ -29,9 +29,9 @@ This is a system-triggered internal message, not a user shopping request. Extrac
 
 3. CONTINUATION / COMPOUND FOLLOW-UP
 Check history before classifying anything below this line.
-If the latest message is a short affirmation (yeah, yes, ok, sure, yep, do it, sounds good, go ahead) AND the previous assistant message ended with a yes/no question:
-→ classify by WHAT is being confirmed, using the previous assistant message as context (e.g. if assistant asked "want a card too?" and user says "yes add a card" → continue gift/search flow).
-→ Do NOT restart as a fresh, context-less search. Carry forward signals in refined_query.
+If the latest message is a short affirmation (yeah, yes, ok, sure, yep, do it, sounds good, go ahead) OR if the user replies with a product choice/category (e.g., "flowers", "jewelry", "cake", "roses", "red ones") after the assistant asked what they prefer or what to search for:
+→ classify as "gift" (or "search"), extract their choice into refined_query (e.g., "flowers"), and carry forward established session context (occasion, recipient, city, date).
+→ NEVER set intent to "clarify" when the user just answered your clarifying question with a product choice! Do not leave refined_query as null.
 
 5. POST-ORDER CROSS-SELL / RE-ENGAGEMENT
 {% if has_confirmed_order %}
@@ -100,7 +100,7 @@ Examples:
 8. GIFT / SEARCH
 is_specific_enough (boolean): evaluate using the ENTIRE conversation above.
 - true if prior turns established occasion/product hint/recipient gender/budget/relationship AND the latest message adds any detail (even "yes" or confirming "birthday") — OR if ANY product noun appears in the message (flowers, flower, rose, roses, cake, chocolate, chocolates, perfume, dress, jewellery, gift set, bouquet, toy, electronics, phone, watch, shoes, saree, or any other product noun) — OR if the message is "show me X" / "I want X" for any noun X.
-- Emotional distress + occasion word, even with NO product noun (e.g. "machan I'm dead, forgot anniversary tomorrow help") → also counts as specific enough to proceed, but set intent = "clarify" so concierge can ask the one clarifying question (her preferences) before searching — do not search yet, but DO capture occasion and emotional_context immediately.
+- Emotional distress + occasion word, even with NO product noun (e.g. "machan I'm dead, forgot anniversary tomorrow help") → also counts as specific enough to proceed, but set intent = "clarify" so concierge can ask the one clarifying question (her preferences) before searching — do not search yet, but DO capture occasion and emotional_context immediately. NOTE: Only set intent = "clarify" on the INITIAL request when no product is named! If the user replies with a product choice (like "flowers", "cake", "jewelry") in a later turn, you MUST set intent = "gift" (or "search") and extract refined_query!
 - false only if truly no useful signal exists anywhere yet.
 - If false, set intent to "clarify" instead of "gift"/"search".
 

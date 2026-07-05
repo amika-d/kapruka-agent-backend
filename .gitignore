@@ -10,3 +10,5 @@ wheels/
 .venv
 .env
 app/data/sessions.json
+data/sessions.json
+data/*.json

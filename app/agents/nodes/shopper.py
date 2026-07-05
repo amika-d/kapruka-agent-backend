@@ -66,6 +66,24 @@ def is_relevant(product: dict, intent_context: dict) -> bool:
     if not any(k in query_text for k in ["cake", "ribbon", "gateau", "torte", "food", "grocery", "sweet", "chocolate", "kavum", "kokis", "hamper", "eat"]):
         if any(k in name for k in ["cake", "ribbon cake", "gateau", "torte"]):
             return False
+            
+    # Filter out mismatched holiday/occasion gifts & greeting cards
+    query_and_rel = f"{intent_context.get('query') or ''} {intent_context.get('relation') or ''} {intent_context.get('occasion') or ''}".lower()
+    if "father" not in query_and_rel and "thaththa" not in query_and_rel and "dad" not in query_and_rel:
+        if "father" in name or "thaththa" in name or "dad" in name:
+            return False
+    if "mother" not in query_and_rel and "ammi" not in query_and_rel and "mom" not in query_and_rel:
+        if "mother" in name or "ammi" in name or "mom" in name:
+            return False
+    if "birthday" not in query_and_rel and "bday" not in query_and_rel:
+        if "birthday" in name or "bday" in name:
+            return False
+    if "valentine" not in query_and_rel and "lover" not in query_and_rel:
+        if "valentine" in name:
+            return False
+    if "anniversary" not in query_and_rel:
+        if "anniversary" in name:
+            return False
     
     return True
 
@@ -85,6 +103,9 @@ async def shopper_node(state: GraphState) -> dict:
     intent_context = {
         "query": state.get("refined_query"),
         "image_context": state.get("image_context"),
+        "occasion": state.get("occasion"),
+        "relation": state.get("gift_recipient_relation"),
+        "emotional_context": state.get("emotional_context"),
         "requested_color": state.get("requested_color"),
         "exclude_kids": state.get("exclude_kids") or (
             state.get("gift_recipient_gender") in ["male", "female"]
