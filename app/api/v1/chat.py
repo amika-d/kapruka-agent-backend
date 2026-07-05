@@ -89,7 +89,9 @@ async def event_generator(request: ChatRequest):
         config = {"configurable": {"thread_id": f"{request.session_id}_{uuid4()}"}}
         
         seen_step_keys = set()
-        final_text = None
+        final_text = ""
+        collected_thinking: list[dict] = []
+        last_ui_payload: dict | None = None
         
         async for event in compiled_graph.astream(
             initial_state, 
@@ -105,6 +107,11 @@ async def event_generator(request: ChatRequest):
                     key = f"{step_name}_{step_detail}"
                     if key not in seen_step_keys:
                         seen_step_keys.add(key)
+                        collected_thinking.append({
+                            "step": step.get("step"),
+                            "detail": step.get("detail"),
+                            "status": step.get("status", "done")
+                        })
                         # Flat shape: {type, step, detail, status}
                         yield f"data: {json.dumps({'type': 'thinking', 'step': step_name, 'detail': step_detail, 'status': step.get('status', 'done')})}\n\n"
                         await asyncio.sleep(0)
@@ -113,6 +120,10 @@ async def event_generator(request: ChatRequest):
                 if node_output.get("search_results"):
                     products = node_output["search_results"]
                     print(f"STREAMING CAROUSEL — image_urls: {[p.get('image_url') for p in products]}")
+                    last_ui_payload = {
+                        "component": "ProductCarousel",
+                        "props": {"items": products}
+                    }
                     ui_payload = {
                         "type": "ui",
                         "component": "ProductCarousel",
@@ -124,6 +135,10 @@ async def event_generator(request: ChatRequest):
                 # Stream order tracking as OrderTimeline UI component
                 if node_output.get("order_status"):
                     order_status = node_output["order_status"]
+                    last_ui_payload = {
+                        "component": "OrderTimeline", 
+                        "props": {"orderStatus": order_status}
+                    }
                     yield f"data: {json.dumps({'type': 'ui', 'component': 'OrderTimeline', 'props': {'orderStatus': order_status}})}\n\n"
                     await asyncio.sleep(0)
 
@@ -143,11 +158,16 @@ async def event_generator(request: ChatRequest):
         store.append_message(request.session_id, {
             "role": "user", "content": request.message
         })
-        if final_text:
-            store.append_message(request.session_id, {
-                "role": "assistant", 
+        if final_text or collected_thinking or last_ui_payload:
+            assistant_msg = {
+                "role": "assistant",
                 "content": final_text
-            })
+            }
+            if collected_thinking:
+                assistant_msg["thinking"] = collected_thinking
+            if last_ui_payload:
+                assistant_msg["ui"] = last_ui_payload
+            store.append_message(request.session_id, assistant_msg)
         
         yield "data: [DONE]\n\n"
 
@@ -165,34 +185,3 @@ async def stream_chat(request: ChatRequest):
         }
     )
 
-
-@router.get("/sessions")
-async def list_sessions():
-    """Return a list of all saved chat sessions with their title and timestamp."""
-    sessions = store.list_all_session_details()
-    result = []
-    for s in sessions:
-        messages = s.get("messages", [])
-        # Title = first user message, truncated
-        title = next(
-            (m["content"][:60] for m in messages if m.get("role") == "user"),
-            "New Chat"
-        )
-        result.append({
-            "session_id": s["session_id"],
-            "title": title,
-            "last_accessed": s["last_accessed"],
-            "message_count": len(messages),
-        })
-    return result
-
-
-@router.get("/sessions/{session_id}")
-async def get_session(session_id: str):
-    """Return the full message history for a specific session."""
-    session = store.get_session(session_id)
-    return {
-        "session_id": session_id,
-        "messages": session.get("messages", []),
-        "last_accessed": session.get("last_accessed"),
-    }

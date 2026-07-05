@@ -1,35 +1,56 @@
 import time
 import json
 import os
+import logging
+from pathlib import Path
 from collections import OrderedDict
 from typing import Dict, Any, List
+
+logger = logging.getLogger(__name__)
 
 DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "sessions.json")
 
 class SessionStore:
+    SESSIONS_FILE = Path("data/sessions.json")
+
     def __init__(self, max_sessions: int = 100, ttl_seconds: int = 7200):
         self.max_sessions = max_sessions
         self.ttl_seconds = ttl_seconds
         self._sessions: OrderedDict[str, Dict[str, Any]] = OrderedDict()
-        self._load_from_disk()
+        self.load_from_disk()
     
+    def load_from_disk(self):
+        """Load sessions from disk. Called on server startup."""
+        try:
+            if not self.SESSIONS_FILE.exists():
+                return
+            with open(self.SESSIONS_FILE) as f:
+                data = json.load(f)
+            self._sessions = OrderedDict(data)
+            logger.info(f"Loaded {len(self._sessions)} sessions from disk")
+        except Exception as e:
+            logger.error(f"Failed to load sessions: {e}")
+
+    def save_to_disk(self):
+        """Save all sessions to disk. Called on server shutdown."""
+        try:
+            self.SESSIONS_FILE.parent.mkdir(exist_ok=True)
+            serializable = {}
+            now = time.time()
+            for sid, data in self._sessions.items():
+                if now - data.get("last_accessed", 0) < self.ttl_seconds:
+                    serializable[sid] = data
+            with open(self.SESSIONS_FILE, "w") as f:
+                json.dump(serializable, f, default=str)
+            logger.info(f"Saved {len(serializable)} sessions to disk")
+        except Exception as e:
+            logger.error(f"Failed to save sessions: {e}")
+
     def _load_from_disk(self):
-        if os.path.exists(DATA_FILE):
-            try:
-                with open(DATA_FILE, "r") as f:
-                    data = json.load(f)
-                    for k, v in data.items():
-                        self._sessions[k] = v
-            except Exception as e:
-                print(f"Error loading sessions: {e}")
+        self.load_from_disk()
 
     def _save_to_disk(self):
-        os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-        try:
-            with open(DATA_FILE, "w") as f:
-                json.dump(self._sessions, f, indent=2)
-        except Exception as e:
-            print(f"Error saving sessions: {e}")
+        self.save_to_disk()
 
     def _evict_expired(self):
         now = time.time()
